@@ -45,30 +45,35 @@ class Score(object):
 #classic_score = Score(3, 2, 6, 7, 2, 3)
 
 
-def ball_result(player1, player2, std1=0.5, std2=0.2, boundary=1.5):
+def ball_result(player1, player2, std1=0.1, std2=0.0, boundary=1.0):
     """
     The result (res) depends mainly on both players' skills and some random
-    noise (random.gauss(m, mu)).
-    If res falls outside [-0.75, 0.75], then one player scores.
+    noise.
+    If res falls outside [-boundary/2, boundary/2], then one player scores.
     Otherwise, players score depending on their cumulative skills (prob_error).
     If they are good players, errors are rarer.
+    std1, std2 and boundary are parameters used for fine tuning.
     
     """
-    #res = player1.get_skill() - player2.get_skill() + random.gauss(0,std1)
+    # Calculate the skill differential and add some random noise:
     res = player1.get_skill() - player2.get_skill() + \
         (random.random()-0.5)*std1
-    if res < -boundary:
+    # If outside boundaries ( = clear cut outcome), return result
+    if res < -boundary/2.0:
         return 2
-    elif res > boundary:
+    elif res > boundary/2.0:
         return 1
+    # If not outside boundaries:
     else:
-        prob_error = 1.0 - (player1.get_skill()+player2.get_skill())/2
+        # Calculate some cumulative probability of an error in the exchange
+        # If no error, return 0
+        prob_error = 1.0 - (player1.get_skill()+player2.get_skill())/2.0
         if random.random() > prob_error:
             return 0
+        # Otherwise, randomize error according to skills and weigh with std2
         else:
-            #divide prob_error proportionally to skills
-            if random.random() < (player1.get_skill() + random.gauss(0, std2))\
-                    / (player1.get_skill()+player2.get_skill()):
+            if random.random() < (player1.get_skill() + std2) / \
+                    (player1.get_skill() + player2.get_skill() + 2*std2):
                 return 1
             else:
                 return 2
@@ -104,77 +109,110 @@ def convert_scores(ball_count1, ball_count2, diff):
     return score1, score2
 
 
-def play_game(player_1, player_2, balls, diff):
+def play_game(player_1, player_2, balls=3, diff=2, show_game=False, std1=0.1,
+              std2=0.0, boundary=1.0):
+    """
+    It plays a game between two players until one wins it.
+    - balls: minimum numbers of balls to win before checking the diff[erence]
+    - diff: required difference between balls won in order to call a winner
+    - show: a True value prints the scores on the screen
+    - the remaining parameters (std1, std2, boundary) are passed to ball_result
+    The traditional scoring system requires balls=3, diff=2
+
+    """
     ball_count1 = 0
     ball_count2 = 0
     while (ball_count1 <= balls and ball_count2 <= balls) or \
             abs(ball_count1-ball_count2) < diff:
-        res = ball_result(player_1, player_2)
+        res = ball_result(player_1, player_2, std1, std2, boundary)
         if res == 1:
             ball_count1 += 1
         elif res == 2:
             ball_count2 += 1
-        #score1, score2 = convert_scores(ball_count1, ball_count2, diff)
-        #print score1,  " : ", score2
+        if show_game:
+            score1, score2 = convert_scores(ball_count1, ball_count2, diff)
+            print score1,  " : ", score2
     if ball_count1 > ball_count2:
         return 1
     else:
         return 2
 
 
-def play_set(player_1, player_2, balls, diff, min_games, max_games,
-             games_diff):
+def play_set(player_1, player_2, min_games=6, max_games=7,
+             games_diff=2, show_set= False, balls=3, diff=2, show_game=False, std1=0.1,
+              std2=0.0, boundary=1.0):
+    """
+    It plays a set between two players.
+    - min_games: minimum numbers of games won to win a set
+    - max_games: maximum numbers of games won to win a set
+    - games_diff: minimum difference between player's won games to win set if
+    less than max_games (i.e. win with 6-4, but not with 6-5)
+    - show_set is a boolean parameter to display the set on the screen
+    - the remaining parameters are passed to play_game
+    The traditional scoring system is min_games=6, max_games=7, games_diff=2
+    """
     game_count1 = 0
     game_count2 = 0
     while (game_count1 < min_games and game_count2 < min_games) or \
             (abs(game_count1 - game_count2) < games_diff
              and game_count1 < max_games and game_count2 < max_games):
-        res = play_game(player_1, player_2, balls, diff)
+        res = play_game(player_1, player_2, balls, diff, show_game, std1,
+              std2, boundary)
         if res == 1:
             game_count1 += 1
         else:
             game_count2 += 1
-        #print game_count1, ' : ', game_count2
+        if show_set:
+            print game_count1, ' : ', game_count2
     return game_count1, game_count2
 
 
-def play_match(player_1, player_2, score):
+def play_match(player_1, player_2, score, show_match=False, show_set=False,
+               show_game=False, std1=0.1, std2=0.0, boundary=1.0):
     """
-    p1, p2 - players
-    score - Score object
+    It lays a match between two players
+    - score - Score object
+    - show_match = display match on screen
     """
     min_sets = score.min_sets
     sets = []
     sets1 = 0
     sets2 = 0
     while sets1 < min_sets and sets2 < min_sets:
-        res = play_set(player_1, player_2, score.balls, score.diff,
-                       score.min_games, score.max_games, score.games_diff)
+        res = play_set(player_1, player_2, score.min_games, score.max_games,
+                       score.games_diff, show_set, score.balls, score.diff,
+                       show_game, std1, std2, boundary)
         sets.append(res)
         if res[0] > res[1]:
             sets1 += 1
         else:
             sets2 += 1
-    print sets
+    if show_match:
+        print sets
     if sets1 > sets2:
         return 1
     else:
         return 2
         
     
-def simulation(player1, player2, score, num):
-    win_one = 0
+def simulation(player1, player2, score, num, show_match=False, show_set=False,
+               show_game=False, std1=0.1, std2=0.0, boundary=1.0):
+    """
+    Simulate num games and return percentage won by first player
+    """
+    win_one = 0.0
     for i in range(num):
-        res = play_match(player1, player2, score)
+        res = play_match(player1, player2, score, show_match, show_set,
+                         show_game, std1, std2, boundary)
         if res == 1:
             win_one += 1
-    return win_one
+    return win_one/num
 
 
-def sim_ball_res(player_1, player_2, std1, std2, boundary, num):
-    res_one = 0
-    res_two = 0
-    res_zero = 0
+def sim_ball_res(player_1, player_2, std1=0.1, std2=0.0, boundary=1, num=100):
+    res_one = 0.0
+    res_two = 0.0
+    res_zero = 0.0
     for i in range(num):
         res = ball_result(player_1, player_2, std1, std2, boundary)
         if res == 1:
@@ -183,7 +221,7 @@ def sim_ball_res(player_1, player_2, std1, std2, boundary, num):
             res_two += 1
         else:
             res_zero += 1
-    return res_one, res_two, res_zero
+    return res_one/num, res_two/num, res_zero/num
 
 
 p1 = Player('Nadal', 0.95)
@@ -191,6 +229,7 @@ p2 = Player('Federer', 0.95)
 p3 = Player('Filip', 0.1)
 p4 = Player('Oana', 0.15)
 p5 = Player('Djokovic', 0.9)
+p6 = Player('Tsonga', 0.8)
 classic_score = Score(3, 2, 6, 7, 2, 3)
 play_match(p1, p2, classic_score)
 weird_score = Score(100, 3, 1, 1, 1, 1)
@@ -199,8 +238,9 @@ classic_score_3sets = Score(3, 2, 6, 7, 2, 2)
 simulation(p1, p2, classic_score, 1000)
 simulation(p3, p4, classic_score, 1000)
 simulation(p1, p5, classic_score, 10000)
+simulation(p1, p6, classic_score, 10000)
 simulation(p1, p2, weird_score, 1000)
 simulation(p1, p2, classic_score_3sets, 10000)
 simulation(p1, p5, classic_score_3sets, 10000)
 
-sim_ball_res(p1, p5, 0.5, 0.2, 0.75, 100000)
+sim_ball_res(p1, p5, std1=0.1, std2=0.0, boundary=1, num=100)
